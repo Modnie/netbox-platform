@@ -1,0 +1,40 @@
+# OpenTofu working directory
+**/.terraform/*
+
+# OpenTofu state
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Local variable and secret files
+*.tfvars
+*.tfvars.json
+.env
+.env.*
+
+# Allow sanitized examples
+!*.example.tfvars
+!.env.example
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Local CLI configuration
+.terraformrc
+terraform.rc
+
+# Local override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ansible local inventory and secrets
+ansible/inventory/*.local.ini
+ansible/inventory/group_vars/**/vault.yml
+ansible/inventory/host_vars/**/vault.yml
+
+# Operating systems and editors
+.DS_Store
+*.swp
