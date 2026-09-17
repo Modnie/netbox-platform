@@ -3,10 +3,6 @@ variable "proxmox_node_name" {
   type        = string
 }
 
-variable "cloud_image_datastore_id" {
-  description = "Proxmox datastore used for cloud images"
-  type        = string
-}
 
 variable "netbox_vm" {
   description = "NetBox virtual machine configuration"
@@ -24,4 +20,9 @@ variable "netbox_vm" {
     ipv4_gateway        = string
     ssh_public_key_file = string
   })
+}
+
+variable "ubuntu_template_vm_id" {
+  description = "VMID of the Ubuntu cloud-init template"
+  type        = number
 }

@@ -9,6 +9,14 @@ resource "proxmox_virtual_environment_vm" "netbox" {
   on_boot       = true
   scsi_hardware = "virtio-scsi-single"
 
+  clone {
+    vm_id        = var.ubuntu_template_vm_id
+    node_name    = var.proxmox_node_name
+    datastore_id = var.netbox_vm.disk_datastore_id
+    full         = true
+    retries      = 3
+  }
+
   cpu {
     cores = var.netbox_vm.cpu_cores
     type  = "x86-64-v2-AES"
@@ -18,13 +26,8 @@ resource "proxmox_virtual_environment_vm" "netbox" {
     dedicated = var.netbox_vm.memory_mb
   }
 
-  agent {
-    enabled = true
-  }
-
   disk {
     datastore_id = var.netbox_vm.disk_datastore_id
-    file_id      = proxmox_download_file.ubuntu_noble_cloud_image.id
     file_format  = "raw"
     interface    = "scsi0"
     iothread     = true
@@ -41,6 +44,7 @@ resource "proxmox_virtual_environment_vm" "netbox" {
 
   initialization {
     datastore_id = var.netbox_vm.disk_datastore_id
+    upgrade      = false
 
     dns {
       servers = ["8.8.8.8"]
@@ -69,5 +73,5 @@ resource "proxmox_virtual_environment_vm" "netbox" {
     type = "l26"
   }
 
-  started = false
+  started = true
 }

@@ -1,6 +1,5 @@
-proxmox_node_name        = "pve"
-cloud_image_datastore_id = "local"
-
+proxmox_node_name     = "pve"
+ubuntu_template_vm_id = 9000
 netbox_vm = {
   id                  = 300
   name                = "netbox"
