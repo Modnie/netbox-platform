@@ -1,0 +1,103 @@
+---
+services:
+  netbox: &netbox
+    image: "{{ netbox_image }}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    env_file:
+      - env/netbox.env
+    user: "netbox:root"
+    ports:
+      - "{{ netbox_http_bind_address }}:{{ netbox_http_port }}:8080"
+    healthcheck:
+      test:
+        - CMD
+        - /opt/netbox/health.sh
+      start_period: 300s
+      timeout: 3s
+      interval: 15s
+    restart: unless-stopped
+    volumes:
+      - netbox-media-files:/opt/netbox/netbox/media
+      - netbox-reports-files:/opt/netbox/netbox/reports
+      - netbox-scripts-files:/opt/netbox/netbox/scripts
+
+  netbox-worker:
+    <<: *netbox
+    depends_on:
+      netbox:
+        condition: service_healthy
+    command:
+      - /opt/netbox/venv/bin/python
+      - /opt/netbox/netbox/manage.py
+      - rqworker
+    ports: []
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - ps -aux | grep -v grep | grep -q rqworker
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+
+  postgres:
+    image: "{{ netbox_postgres_image }}"
+    env_file:
+      - env/postgres.env
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -q -t 2 -d "$${POSTGRES_DB}" -U "$${POSTGRES_USER}"'
+      start_period: 20s
+      timeout: 30s
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - netbox-postgres:/var/lib/postgresql
+
+  redis:
+    image: "{{ netbox_valkey_image }}"
+    command:
+      - sh
+      - -c
+      - 'valkey-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"'
+    env_file:
+      - env/redis.env
+    healthcheck: &redis-healthcheck
+      test:
+        - CMD-SHELL
+        - 'test "$$(valkey-cli --pass "$${REDIS_PASSWORD}" ping)" = PONG'
+      start_period: 5s
+      timeout: 3s
+      interval: 1s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - netbox-redis-data:/data
+
+  redis-cache:
+    image: "{{ netbox_valkey_image }}"
+    command:
+      - sh
+      - -c
+      - 'valkey-server --requirepass "$${REDIS_PASSWORD}"'
+    env_file:
+      - env/redis-cache.env
+    healthcheck: *redis-healthcheck
+    restart: unless-stopped
+    volumes:
+      - netbox-redis-cache-data:/data
+
+volumes:
+  netbox-media-files:
+  netbox-postgres:
+  netbox-redis-cache-data:
+  netbox-redis-data:
+  netbox-reports-files:
+  netbox-scripts-files:

@@ -1,0 +1,20 @@
+---
+netbox_postgres_database: netbox
+netbox_postgres_user: netbox
+netbox_postgres_password: "{{ vault_netbox_postgres_password }}"
+
+netbox_redis_password: "{{ vault_netbox_redis_password }}"
+netbox_redis_cache_password: "{{ vault_netbox_redis_cache_password }}"
+
+netbox_secret_key: "{{ vault_netbox_secret_key }}"
+netbox_api_token_pepper: "{{ vault_netbox_api_token_pepper }}"
+
+netbox_superuser_name: adminrio
+netbox_superuser_email: admin@localhost
+netbox_superuser_password: "{{ vault_netbox_superuser_password }}"
+
+netbox_allowed_hosts:
+  - 192.168.70.220
+  - localhost
+
+netbox_time_zone: Europe/Moscow

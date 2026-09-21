@@ -1,0 +1,7 @@
+---
+vault_netbox_postgres_password: "CHANGE_ME"
+vault_netbox_redis_password: "CHANGE_ME"
+vault_netbox_redis_cache_password: "CHANGE_ME"
+vault_netbox_secret_key: "CHANGE_ME"
+vault_netbox_api_token_pepper: "CHANGE_ME"
+vault_netbox_superuser_password: "CHANGE_ME"

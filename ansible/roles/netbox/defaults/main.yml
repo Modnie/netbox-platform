@@ -1,0 +1,10 @@
+---
+netbox_install_path: /opt/netbox
+netbox_compose_project_name: netbox
+
+netbox_image: docker.io/netboxcommunity/netbox:v4.7.1-5.1.1
+netbox_postgres_image: docker.io/postgres:18-alpine
+netbox_valkey_image: docker.io/valkey/valkey:9.1-alpine
+
+netbox_http_bind_address: "0.0.0.0"
+netbox_http_port: 8000

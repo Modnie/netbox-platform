@@ -2,15 +2,16 @@
 
 Infrastructure automation for deploying a self-hosted NetBox platform on Proxmox VE.
 
-The project separates infrastructure provisioning, operating system configuration, and application deployment into independent layers.
+The project separates infrastructure provisioning, operating system configuration, container runtime management, and application deployment into independent layers.
 
 ## Architecture
 
 * Proxmox VE provides the virtualization platform.
-* OpenTofu creates the NetBox virtual machine by cloning an Ubuntu cloud-init template.
+* OpenTofu creates the NetBox virtual machine by cloning an Ubuntu 24.04 cloud-init template.
 * Cloud-init configures the hostname, network, administrative user, and SSH key.
-* Ansible configures the operating system and installs Docker Engine.
-* Docker Compose will run NetBox and its dependencies.
+* Ansible configures the operating system, QEMU Guest Agent, and Docker Engine.
+* Docker Compose runs NetBox, PostgreSQL, Valkey, and the NetBox background worker.
+* Ansible Vault protects application credentials and cryptographic secrets.
 
 ## Current Status
 
@@ -29,16 +30,24 @@ Implemented:
 * Docker Engine and Docker Compose plugin installation
 * Docker service management
 * administrative user access to Docker
+* pinned project-local Ansible collections
+* NetBox deployment with Docker Compose
+* PostgreSQL and Valkey deployment
+* persistent Docker volumes
+* application and dependency health checks
+* encrypted secret management with Ansible Vault
+* automated NetBox superuser creation
 * idempotent OpenTofu and Ansible execution
 
 Planned:
 
-* NetBox deployment with Docker Compose
-* persistent storage and secret management
-* application health checks
-* validation and linting
-* continuous integration
-* backup and monitoring integration
+* automated validation and linting
+* continuous integration with GitHub Actions
+* remote OpenTofu state storage
+* application and database backups
+* monitoring integration
+* reverse proxy and TLS termination
+* dedicated NetBox API service account
 
 ## Repository Structure
 
@@ -46,6 +55,10 @@ Planned:
 netbox-platform/
 ├── ansible/
 │   ├── inventory/
+│   │   ├── group_vars/
+│   │   │   └── netbox_servers/
+│   │   │       ├── main.yml
+│   │   │       └── vault.example.yml
 │   │   └── hosts.example.ini
 │   ├── playbooks/
 │   │   └── bootstrap.yml
@@ -55,11 +68,22 @@ netbox-platform/
 │   │   │   │   └── main.yml
 │   │   │   └── tasks/
 │   │   │       └── main.yml
-│   │   └── docker/
+│   │   ├── docker/
+│   │   │   ├── defaults/
+│   │   │   │   └── main.yml
+│   │   │   └── tasks/
+│   │   │       └── main.yml
+│   │   └── netbox/
 │   │       ├── defaults/
 │   │       │   └── main.yml
-│   │       └── tasks/
-│   │           └── main.yml
+│   │       ├── tasks/
+│   │       │   └── main.yml
+│   │       └── templates/
+│   │           ├── compose.yml.j2
+│   │           ├── netbox.env.j2
+│   │           ├── postgres.env.j2
+│   │           ├── redis-cache.env.j2
+│   │           └── redis.env.j2
 │   └── requirements.yml
 ├── tofu/
 │   ├── data.tf
@@ -73,7 +97,7 @@ netbox-platform/
 └── README.md
 ```
 
-Local inventory, credentials, OpenTofu state, plan files, installed Ansible collections, and environment-specific variables are excluded from Git.
+Local inventory, encrypted environment secrets, OpenTofu state, plan files, installed Ansible collections, and environment-specific variables are excluded from Git.
 
 ## Prerequisites
 
@@ -88,12 +112,15 @@ Local inventory, credentials, OpenTofu state, plan files, installed Ansible coll
 
 The Ubuntu template is prepared separately and referenced through `ubuntu_template_vm_id`. It contains a bootable Ubuntu cloud image and a cloud-init drive.
 
-### Operating system configuration
+### Operating system and application configuration
 
 * Ansible Core 2.16 or later
 * SSH access to the provisioned virtual machine
 * passwordless privilege escalation for the Ansible user
-* access to Ubuntu and Docker package repositories
+* access to Ubuntu, Docker, and container image repositories
+* Ansible Vault password for environment secrets
+
+The required Ansible collection versions are pinned in `ansible/requirements.yml`.
 
 ## OpenTofu Configuration
 
@@ -145,7 +172,7 @@ tofu -chdir=tofu apply deployment.tfplan
 
 ## Ansible Configuration
 
-Install the required Ansible collections:
+Install the pinned Ansible collections:
 
 ```bash
 ansible-galaxy collection install \
@@ -161,7 +188,7 @@ cp \
   ansible/inventory/hosts.local.ini
 ```
 
-Edit `ansible/inventory/hosts.local.ini` and set the real server address, SSH user, and private key path.
+Edit `ansible/inventory/hosts.local.ini` and set the server address, SSH user, and private key path.
 
 Verify inventory resolution:
 
@@ -175,7 +202,44 @@ Test connectivity:
 ansible netbox_servers -m ansible.builtin.ping
 ```
 
-## Server Bootstrap
+## Secret Configuration
+
+Create the local Vault file from the public example:
+
+```bash
+cp \
+  ansible/inventory/group_vars/netbox_servers/vault.example.yml \
+  ansible/inventory/group_vars/netbox_servers/vault.yml
+```
+
+Encrypt the local file:
+
+```bash
+ansible-vault encrypt \
+  ansible/inventory/group_vars/netbox_servers/vault.yml
+```
+
+Edit the encrypted variables:
+
+```bash
+ansible-vault edit \
+  ansible/inventory/group_vars/netbox_servers/vault.yml
+```
+
+Replace every `CHANGE_ME` value with a strong, unique secret.
+
+The local Vault file contains:
+
+* PostgreSQL password
+* primary Valkey password
+* cache Valkey password
+* NetBox secret key
+* NetBox API token pepper
+* initial NetBox superuser password
+
+The encrypted `vault.yml` file is environment-specific and excluded from Git. The tracked `vault.example.yml` file documents only the required variable names.
+
+## Platform Deployment
 
 Check the playbook syntax:
 
@@ -190,16 +254,19 @@ Preview the configuration:
 ```bash
 ansible-playbook \
   --check \
+  --ask-vault-pass \
   ansible/playbooks/bootstrap.yml
 ```
 
-Apply the base system and Docker configuration:
+Apply the complete platform configuration:
 
 ```bash
-ansible-playbook ansible/playbooks/bootstrap.yml
+ansible-playbook \
+  --ask-vault-pass \
+  ansible/playbooks/bootstrap.yml
 ```
 
-The bootstrap playbook currently:
+The bootstrap playbook:
 
 * installs common system packages
 * configures the system timezone
@@ -208,24 +275,58 @@ The bootstrap playbook currently:
 * installs Docker Engine and Docker Compose
 * enables and starts the Docker service
 * adds authorized users to the `docker` group
+* deploys the NetBox Compose configuration
+* renders protected application environment files
+* starts PostgreSQL and Valkey
+* starts the NetBox web application and background worker
+* waits for the NetBox web interface to become available
+* creates the initial NetBox superuser when it does not already exist
 
 A new login session may be required after Docker group membership is changed.
 
+## Application Stack
+
+The Docker Compose project contains the following services:
+
+| Service | Purpose |
+| --- | --- |
+| `netbox` | NetBox web application |
+| `netbox-worker` | NetBox background job worker |
+| `postgres` | PostgreSQL database |
+| `redis` | Persistent Valkey queue backend |
+| `redis-cache` | Valkey cache backend |
+
+Application data is stored in named Docker volumes for PostgreSQL, Valkey, NetBox media, reports, and custom scripts.
+
+The web interface is exposed on the configured `netbox_http_port`, which defaults to port `8000`:
+
+```text
+http://SERVER_ADDRESS:8000/
+```
+
 ## Validation
 
-Check that the infrastructure configuration remains idempotent:
+Check that the infrastructure remains converged:
 
 ```bash
 tofu -chdir=tofu plan
 ```
 
-Check that the server configuration remains idempotent:
+A converged infrastructure should produce:
 
-```bash
-ansible-playbook ansible/playbooks/bootstrap.yml
+```text
+No changes. Your infrastructure matches the configuration.
 ```
 
-A fully converged environment should produce no OpenTofu changes and an Ansible recap with `changed=0` and `failed=0`.
+Check that the server and application configuration remain idempotent:
+
+```bash
+ansible-playbook \
+  --ask-vault-pass \
+  ansible/playbooks/bootstrap.yml
+```
+
+A fully converged environment should finish with `changed=0` and `failed=0`.
 
 Verify Docker on the managed server:
 
@@ -235,6 +336,15 @@ docker compose version
 systemctl is-active docker
 ```
 
+Verify the application stack:
+
+```bash
+cd /opt/netbox
+docker compose ps
+```
+
+All application services with configured health checks should report `healthy`.
+
 ## Operational Notes
 
 OpenTofu state is currently stored locally and must be protected as operational data. A remote state backend may be introduced later.
@@ -243,13 +353,20 @@ The base Ubuntu template is an infrastructure prerequisite. Application packages
 
 The Docker role uses Docker's official Ubuntu repository instead of distribution-provided Docker packages.
 
+The initial NetBox superuser is created only when the configured username does not already exist. Repeated playbook runs do not reset its password.
+
+The NetBox API token pepper is configured, but a superuser API token is intentionally not created. API automation should use a dedicated service account with the minimum required permissions.
+
 ## Security
 
-* secrets remain outside the repository
-* local inventory and variable files are ignored
-* state and plan files are ignored
+* secrets are encrypted with Ansible Vault
+* the environment-specific Vault file is excluded from Git
+* rendered application environment files are owned by `root` with mode `0600`
+* local inventory and OpenTofu variable files are excluded from Git
+* state and plan files are excluded from Git
 * installed Ansible collections are not committed
 * SSH access uses public-key authentication
 * Proxmox API permissions should follow least-privilege principles
 * infrastructure changes must be reviewed through `tofu plan`
 * configuration changes should be reviewed through Ansible check mode
+* application API access should use dedicated least-privilege accounts

@@ -1,0 +1,88 @@
+---
+- name: Validate required NetBox secrets
+  ansible.builtin.assert:
+    that:
+      - netbox_postgres_password | length >= 32
+      - netbox_redis_password | length >= 32
+      - netbox_redis_cache_password | length >= 32
+      - netbox_secret_key | length >= 64
+      - netbox_api_token_pepper | length >= 32
+    fail_msg: Required NetBox secrets are missing or too short
+  no_log: true
+
+- name: Create NetBox installation directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ netbox_install_path }}"
+      mode: "0755"
+    - path: "{{ netbox_install_path }}/env"
+      mode: "0700"
+  register: netbox_directories
+
+- name: Deploy NetBox Compose configuration
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ netbox_install_path }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: netbox_compose_file
+
+- name: Deploy NetBox environment files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ netbox_install_path }}/env/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - src: netbox.env.j2
+      dest: netbox.env
+    - src: postgres.env.j2
+      dest: postgres.env
+    - src: redis.env.j2
+      dest: redis.env
+    - src: redis-cache.env.j2
+      dest: redis-cache.env
+  loop_control:
+    label: "{{ item.dest }}"
+  no_log: true
+  register: netbox_environment_files
+
+- name: Validate NetBox Compose configuration
+  ansible.builtin.command:
+    cmd: docker compose --project-directory {{ netbox_install_path }} config --quiet
+  changed_when: false
+  when:
+    - not ansible_check_mode or not netbox_directories.changed
+    - not ansible_check_mode or not netbox_compose_file.changed
+    - not ansible_check_mode or not netbox_environment_files.changed
+
+- name: Start NetBox application stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ netbox_install_path }}"
+    project_name: "{{ netbox_compose_project_name }}"
+    files:
+      - compose.yml
+    state: present
+    pull: missing
+    remove_orphans: true
+  when:
+    - not ansible_check_mode or not netbox_directories.changed
+    - not ansible_check_mode or not netbox_compose_file.changed
+    - not ansible_check_mode or not netbox_environment_files.changed
+
+- name: Wait for NetBox web interface
+  ansible.builtin.uri:
+    url: "http://localhost:{{ netbox_http_port }}/login/"
+    status_code: 200
+  register: netbox_web_check
+  retries: 30
+  delay: 10
+  until: netbox_web_check.status == 200
+  when: not ansible_check_mode
