@@ -41,3 +41,6 @@ ansible/collections/
 # Operating systems and editors
 .DS_Store
 *.swp
+
+# Node.js dependencies
+node_modules/

@@ -56,7 +56,10 @@
 
 - name: Validate NetBox Compose configuration
   ansible.builtin.command:
-    cmd: docker compose --project-directory {{ netbox_install_path }} config --quiet
+    cmd: >-
+      docker compose
+      --project-directory {{ netbox_install_path }}
+      config --quiet
   changed_when: false
   when:
     - not ansible_check_mode or not netbox_directories.changed

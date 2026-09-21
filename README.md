@@ -1,17 +1,24 @@
 # NetBox Platform
 
-Infrastructure automation for deploying a self-hosted NetBox platform on Proxmox VE.
+Infrastructure automation for deploying a self-hosted NetBox platform on
+Proxmox VE.
 
-The project separates infrastructure provisioning, operating system configuration, container runtime management, and application deployment into independent layers.
+The project separates infrastructure provisioning, operating system
+configuration, container runtime management, and application deployment into
+independent layers.
 
 ## Architecture
 
 * Proxmox VE provides the virtualization platform.
-* OpenTofu creates the NetBox virtual machine by cloning an Ubuntu 24.04 cloud-init template.
-* Cloud-init configures the hostname, network, administrative user, and SSH key.
+* OpenTofu creates the NetBox virtual machine by cloning an Ubuntu 24.04
+  cloud-init template.
+* Cloud-init configures the hostname, network, administrative user, and SSH
+  key.
 * Ansible configures the operating system, QEMU Guest Agent, and Docker Engine.
-* Docker Compose runs NetBox, PostgreSQL, Valkey, and the NetBox background worker.
+* Docker Compose runs NetBox, PostgreSQL, Valkey, and the NetBox background
+  worker.
 * Ansible Vault protects application credentials and cryptographic secrets.
+* GitHub Actions validates infrastructure and configuration changes.
 
 ## Current Status
 
@@ -38,11 +45,13 @@ Implemented:
 * encrypted secret management with Ansible Vault
 * automated NetBox superuser creation
 * idempotent OpenTofu and Ansible execution
+* pinned local quality-tool versions
+* YAML, Ansible, Shell, Markdown, and OpenTofu validation
+* unified local quality-check script
+* continuous integration with GitHub Actions
 
 Planned:
 
-* automated validation and linting
-* continuous integration with GitHub Actions
 * remote OpenTofu state storage
 * application and database backups
 * monitoring integration
@@ -53,6 +62,9 @@ Planned:
 
 ```text
 netbox-platform/
+├── .github/
+│   └── workflows/
+│       └── quality.yml
 ├── ansible/
 │   ├── inventory/
 │   │   ├── group_vars/
@@ -85,6 +97,8 @@ netbox-platform/
 │   │           ├── redis-cache.env.j2
 │   │           └── redis.env.j2
 │   └── requirements.yml
+├── scripts/
+│   └── check.sh
 ├── tofu/
 │   ├── data.tf
 │   ├── providers.tf
@@ -92,12 +106,20 @@ netbox-platform/
 │   ├── variables.tf
 │   ├── versions.tf
 │   └── vm.tf
-├── ansible.cfg
+├── .ansible-lint
 ├── .gitignore
+├── .markdownlint-cli2.jsonc
+├── .yamllint.yml
+├── ansible.cfg
+├── package-lock.json
+├── package.json
+├── requirements-dev.txt
 └── README.md
 ```
 
-Local inventory, encrypted environment secrets, OpenTofu state, plan files, installed Ansible collections, and environment-specific variables are excluded from Git.
+Local inventory, encrypted environment secrets, OpenTofu state, plan files,
+installed Ansible collections, Node.js dependencies, and environment-specific
+variables are excluded from Git.
 
 ## Prerequisites
 
@@ -106,11 +128,14 @@ Local inventory, encrypted environment secrets, OpenTofu state, plan files, inst
 * Proxmox VE
 * OpenTofu 1.10 or later
 * `bpg/proxmox` provider 0.113.1
-* Proxmox API token with permissions required to clone and manage virtual machines
+* Proxmox API token with permissions required to clone and manage virtual
+  machines
 * Ubuntu 24.04 cloud-init template available on the target Proxmox node
 * SSH public key for the administrative user
 
-The Ubuntu template is prepared separately and referenced through `ubuntu_template_vm_id`. It contains a bootable Ubuntu cloud image and a cloud-init drive.
+The Ubuntu template is prepared separately and referenced through
+`ubuntu_template_vm_id`. It contains a bootable Ubuntu cloud image and a
+cloud-init drive.
 
 ### Operating system and application configuration
 
@@ -120,7 +145,19 @@ The Ubuntu template is prepared separately and referenced through `ubuntu_templa
 * access to Ubuntu, Docker, and container image repositories
 * Ansible Vault password for environment secrets
 
-The required Ansible collection versions are pinned in `ansible/requirements.yml`.
+The required Ansible collection versions are pinned in
+`ansible/requirements.yml`.
+
+### Local quality checks
+
+* Python 3.12
+* Node.js 18 or later
+* npm
+* ShellCheck
+* OpenTofu
+
+Python quality-tool versions are pinned in `requirements-dev.txt`. Markdown
+tooling is pinned through `package.json` and `package-lock.json`.
 
 ## OpenTofu Configuration
 
@@ -130,7 +167,8 @@ Copy the public example file:
 cp tofu/terraform.example.tfvars tofu/terraform.tfvars
 ```
 
-Set environment-specific values in `tofu/terraform.tfvars`. This file is excluded from Git.
+Set environment-specific values in `tofu/terraform.tfvars`. This file is
+excluded from Git.
 
 Provider credentials are supplied through environment variables:
 
@@ -140,7 +178,8 @@ export PROXMOX_VE_API_TOKEN="user@realm!token=secret"
 export PROXMOX_VE_INSECURE="false"
 ```
 
-Do not commit credentials, private keys, state files, plan files, or real environment configuration.
+Do not commit credentials, private keys, state files, plan files, or real
+environment configuration.
 
 ## Infrastructure Deployment
 
@@ -188,7 +227,8 @@ cp \
   ansible/inventory/hosts.local.ini
 ```
 
-Edit `ansible/inventory/hosts.local.ini` and set the server address, SSH user, and private key path.
+Edit `ansible/inventory/hosts.local.ini` and set the server address, SSH user,
+and private key path.
 
 Verify inventory resolution:
 
@@ -237,7 +277,9 @@ The local Vault file contains:
 * NetBox API token pepper
 * initial NetBox superuser password
 
-The encrypted `vault.yml` file is environment-specific and excluded from Git. The tracked `vault.example.yml` file documents only the required variable names.
+The encrypted `vault.yml` file is environment-specific and excluded from Git.
+The tracked `vault.example.yml` file documents only the required variable
+names.
 
 ## Platform Deployment
 
@@ -296,15 +338,42 @@ The Docker Compose project contains the following services:
 | `redis` | Persistent Valkey queue backend |
 | `redis-cache` | Valkey cache backend |
 
-Application data is stored in named Docker volumes for PostgreSQL, Valkey, NetBox media, reports, and custom scripts.
+Application data is stored in named Docker volumes for PostgreSQL, Valkey,
+NetBox media, reports, and custom scripts.
 
-The web interface is exposed on the configured `netbox_http_port`, which defaults to port `8000`:
+The web interface is exposed on the configured `netbox_http_port`, which
+defaults to port `8000`:
 
 ```text
 http://SERVER_ADDRESS:8000/
 ```
 
 ## Validation
+
+Run the complete local quality gate:
+
+```bash
+./scripts/check.sh
+```
+
+The script performs:
+
+* Git whitespace validation
+* ShellCheck analysis
+* YAML linting
+* Ansible linting with the production profile
+* Markdown linting
+* OpenTofu formatting validation
+* OpenTofu configuration validation
+
+A successful run finishes with:
+
+```text
+All checks passed.
+```
+
+The same checks run automatically through GitHub Actions on every push to
+`main` and on every pull request.
 
 Check that the infrastructure remains converged:
 
@@ -343,19 +412,27 @@ cd /opt/netbox
 docker compose ps
 ```
 
-All application services with configured health checks should report `healthy`.
+All application services with configured health checks should report
+`healthy`.
 
 ## Operational Notes
 
-OpenTofu state is currently stored locally and must be protected as operational data. A remote state backend may be introduced later.
+OpenTofu state is currently stored locally and must be protected as operational
+data. A remote state backend may be introduced later.
 
-The base Ubuntu template is an infrastructure prerequisite. Application packages and service configuration do not belong in the template and are managed through Ansible.
+The base Ubuntu template is an infrastructure prerequisite. Application
+packages and service configuration do not belong in the template and are
+managed through Ansible.
 
-The Docker role uses Docker's official Ubuntu repository instead of distribution-provided Docker packages.
+The Docker role uses Docker's official Ubuntu repository instead of
+distribution-provided Docker packages.
 
-The initial NetBox superuser is created only when the configured username does not already exist. Repeated playbook runs do not reset its password.
+The initial NetBox superuser is created only when the configured username does
+not already exist. Repeated playbook runs do not reset its password.
 
-The NetBox API token pepper is configured, but a superuser API token is intentionally not created. API automation should use a dedicated service account with the minimum required permissions.
+The NetBox API token pepper is configured, but a superuser API token is
+intentionally not created. API automation should use a dedicated service
+account with the minimum required permissions.
 
 ## Security
 
@@ -365,8 +442,10 @@ The NetBox API token pepper is configured, but a superuser API token is intentio
 * local inventory and OpenTofu variable files are excluded from Git
 * state and plan files are excluded from Git
 * installed Ansible collections are not committed
+* Node.js dependencies are not committed
 * SSH access uses public-key authentication
 * Proxmox API permissions should follow least-privilege principles
 * infrastructure changes must be reviewed through `tofu plan`
 * configuration changes should be reviewed through Ansible check mode
 * application API access should use dedicated least-privilege accounts
+* repository changes are validated through GitHub Actions

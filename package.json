@@ -1,0 +1,10 @@
+{
+  "name": "netbox-platform",
+  "private": true,
+  "scripts": {
+    "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"#node_modules/**\" \"#ansible/collections/**\" \"#tofu/.terraform/**\""
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "0.14.0"
+  }
+}

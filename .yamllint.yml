@@ -1,0 +1,7 @@
+---
+extends: default
+
+ignore: |
+  ansible/collections/
+  ansible/inventory/group_vars/**/vault.yml
+  tofu/.terraform/
