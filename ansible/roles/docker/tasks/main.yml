@@ -1,0 +1,71 @@
+---
+- name: Install Docker repository dependencies
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - python3-debian
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure APT keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download Docker repository signing key
+  ansible.builtin.get_url:
+    url: "{{ docker_apt_key_url }}"
+    dest: "{{ docker_apt_key_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: docker_apt_key
+
+- name: Configure Docker APT repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    types:
+      - deb
+    uris:
+      - "{{ docker_apt_repository_url }}"
+    suites:
+      - "{{ ansible_facts['distribution_release'] }}"
+    components:
+      - stable
+    architectures:
+      - "{{ docker_apt_architecture_map[ansible_facts['architecture']] }}"
+    signed_by: "{{ docker_apt_key_path }}"
+    state: present
+    enabled: true
+  register: docker_apt_repository
+
+- name: Update APT cache for Docker repository
+  ansible.builtin.apt:
+    update_cache: true
+  when: docker_apt_key.changed or docker_apt_repository.changed
+
+- name: Install Docker Engine packages
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+  register: docker_package_install
+
+- name: Enable and start Docker service
+  ansible.builtin.service:
+    name: docker
+    enabled: true
+    state: started
+  when: not ansible_check_mode or not docker_package_install.changed
+
+- name: Add authorized users to Docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups:
+      - docker
+    append: true
+  loop: "{{ docker_users }}"
+  when: not ansible_check_mode or not docker_package_install.changed

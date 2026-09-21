@@ -35,6 +35,9 @@ ansible/inventory/*.local.ini
 ansible/inventory/group_vars/**/vault.yml
 ansible/inventory/host_vars/**/vault.yml
 
+# Installed Ansible collections
+ansible/collections/
+
 # Operating systems and editors
 .DS_Store
 *.swp

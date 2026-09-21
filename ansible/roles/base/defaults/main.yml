@@ -1,0 +1,11 @@
+---
+base_timezone: Europe/Moscow
+
+base_packages:
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - jq
+  - qemu-guest-agent
+  - unzip
