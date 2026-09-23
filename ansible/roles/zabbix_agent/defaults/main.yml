@@ -1,3 +1,14 @@
+---
 zabbix_agent_allowed_server: "{{ zabbix_server_ip }}"
 zabbix_agent_active_server: "{{ zabbix_server_ip }}"
 zabbix_agent_restrict_port: false
+
+zabbix_agent_repository_base_url: https://repo.zabbix.com/zabbix/7.0
+zabbix_agent_repository_directory: pool/main/z/zabbix-release
+
+zabbix_agent_repository_packages:
+  Ubuntu:
+    "24.04": zabbix-release_latest_7.0+ubuntu24.04_all.deb
+    "22.04": zabbix-release_latest_7.0+ubuntu22.04_all.deb
+  Debian:
+    "13": zabbix-release_latest_7.0+debian13_all.deb
