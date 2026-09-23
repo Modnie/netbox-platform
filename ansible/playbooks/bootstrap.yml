@@ -6,4 +6,5 @@
   roles:
     - role: base
     - role: docker
+    - role: zabbix_agent
     - role: netbox

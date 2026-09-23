@@ -1,0 +1,4 @@
+---
+zabbix_server_ip: 192.168.70.210
+zabbix_agent_restrict_port: false
+zabbix_smart_monitoring: false

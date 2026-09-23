@@ -1,0 +1,11 @@
+---
+- name: Restart Zabbix Agent 2
+  ansible.builtin.systemd_service:
+    name: zabbix-agent2
+    state: restarted
+
+- name: Restart Zabbix nftables firewall
+  ansible.builtin.systemd_service:
+    name: zabbix-nftables.service
+    state: restarted
+    daemon_reload: true

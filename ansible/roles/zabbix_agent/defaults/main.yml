@@ -1,0 +1,3 @@
+zabbix_agent_allowed_server: "{{ zabbix_server_ip }}"
+zabbix_agent_active_server: "{{ zabbix_server_ip }}"
+zabbix_agent_restrict_port: false

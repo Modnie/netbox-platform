@@ -1,0 +1,134 @@
+---
+- name: Download Zabbix repository package for Ubuntu
+  ansible.builtin.get_url:
+    url: https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.0+ubuntu24.04_all.deb
+    dest: /tmp/zabbix-release.deb
+    mode: '0644'
+  when:
+    - ansible_distribution == "Ubuntu"
+    - ansible_distribution_version == "24.04"
+
+- name: Download Zabbix repository package for Ubuntu 22.04
+  ansible.builtin.get_url:
+    url: https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.0+ubuntu22.04_all.deb
+    dest: /tmp/zabbix-release.deb
+    mode: '0644'
+  when:
+    - ansible_distribution == "Ubuntu"
+    - ansible_distribution_version == "22.04"
+
+- name: Download Zabbix repository package for Debian
+  ansible.builtin.get_url:
+    url: https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_7.0+debian13_all.deb
+    dest: /tmp/zabbix-release.deb
+    mode: '0644'
+  when:
+    - ansible_distribution == "Debian"
+    - ansible_distribution_major_version == "13"
+
+- name: Install Zabbix repository
+  ansible.builtin.apt:
+    deb: /tmp/zabbix-release.deb
+
+- name: Install Zabbix Agent 2
+  ansible.builtin.apt:
+    name: zabbix-agent2
+    state: present
+    update_cache: true
+
+- name: Install sudo for Zabbix SMART monitoring
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+  when: zabbix_smart_monitoring | default(false)
+
+- name: Configure sudoers for Zabbix SMART monitoring
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/zabbix-smart
+    owner: root
+    group: root
+    mode: '0440'
+    content: |
+      zabbix ALL=(root) NOPASSWD: /usr/sbin/smartctl -a *
+      zabbix ALL=(root) NOPASSWD: /usr/sbin/smartctl --scan *
+      zabbix ALL=(root) NOPASSWD: /usr/sbin/smartctl -j -V
+    validate: '/usr/sbin/visudo -cf %s'
+  when: zabbix_smart_monitoring | default(false)
+
+- name: Configure Zabbix server for passive checks
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^Server='
+    line: 'Server={{ zabbix_agent_allowed_server }}'
+  notify: Restart Zabbix Agent 2
+
+- name: Configure Zabbix server for active checks
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^ServerActive='
+    line: 'ServerActive={{ zabbix_agent_active_server }}'
+  notify: Restart Zabbix Agent 2
+
+- name: Configure Zabbix Agent hostname
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^Hostname='
+    line: 'Hostname={{ inventory_hostname }}'
+  notify: Restart Zabbix Agent 2
+
+- name: Enable and start Zabbix Agent 2
+  ansible.builtin.systemd_service:
+    name: zabbix-agent2
+    state: started
+    enabled: true
+
+- name: Configure firewall for Zabbix Agent
+  ansible.builtin.copy:
+    dest: /etc/nftables-zabbix.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      table inet zabbix_agent_filter {
+          chain input {
+              type filter hook input priority 0; policy accept;
+
+              ip saddr {{ zabbix_agent_allowed_server }} tcp dport 10050 accept
+              tcp dport 10050 drop
+          }
+      }
+    validate: '/usr/sbin/nft -c -f %s'
+  when: zabbix_agent_restrict_port
+  notify: Restart Zabbix nftables firewall
+
+- name: Configure systemd service for Zabbix Agent firewall
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/zabbix-nftables.service
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Firewall rules for Zabbix Agent
+      After=network-online.target docker.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStartPre=-/usr/sbin/nft delete table inet zabbix_agent_filter
+      ExecStart=/usr/sbin/nft -f /etc/nftables-zabbix.conf
+      ExecStop=-/usr/sbin/nft delete table inet zabbix_agent_filter
+
+      [Install]
+      WantedBy=multi-user.target
+  when: zabbix_agent_restrict_port
+  notify: Restart Zabbix nftables firewall
+
+- name: Enable Zabbix Agent firewall service
+  ansible.builtin.systemd_service:
+    name: zabbix-nftables.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: zabbix_agent_restrict_port
